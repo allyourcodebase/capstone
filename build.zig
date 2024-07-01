@@ -5,13 +5,31 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
+    const arm = b.option(bool, "arm", "Controls -DCAPSTONE_HAS_ARM") orelse false;
+    const arm64 = b.option(bool, "arm64", "Controls -DCAPSTONE_HAS_ARM64") orelse false;
+    const mips = b.option(bool, "mips", "Controls -DCAPSTONE_HAS_MIPS") orelse false;
+    const powerpc = b.option(bool, "powerpc", "Controls -DCAPSTONE_HAS_POWERPC") orelse false;
+    const x86 = b.option(bool, "x86", "Controls -DCAPSTONE_HAS_X86") orelse false;
+    const sparc = b.option(bool, "sparc", "Controls -DCAPSTONE_HAS_SPARC") orelse false;
+    const sysz = b.option(bool, "sysz", "Controls -DCAPSTONE_HAS_SYSZ") orelse false;
+    const xcore = b.option(bool, "xcore", "Controls -DCAPSTONE_HAS_XCORE") orelse false;
+    const m68k = b.option(bool, "m68k", "Controls -DCAPSTONE_HAS_M68K") orelse false;
+    const tms320c64x = b.option(bool, "tms320c64x", "Controls -DCAPSTONE_HAS_TMS320C64X") orelse false;
+    const m680x = b.option(bool, "m680x", "Controls -DCAPSTONE_HAS_M680X") orelse false;
+    const evm = b.option(bool, "evm", "Controls -DCAPSTONE_HAS_EVM") orelse false;
+    const wasm = b.option(bool, "wasm", "Controls -DCAPSTONE_HAS_WASM") orelse false;
+    const mos65xx = b.option(bool, "mos65xx", "Controls -DCAPSTONE_HAS_MOS65XX") orelse false;
+    const bpf = b.option(bool, "bpf", "Controls -DCAPSTONE_HAS_BPF") orelse false;
+    const riscv = b.option(bool, "riscv", "Controls -DCAPSTONE_HAS_RISCV") orelse false;
+    const sh = b.option(bool, "sh", "Controls -DCAPSTONE_HAS_SH") orelse false;
+    const tricore = b.option(bool, "tricore", "Controls -DCAPSTONE_HAS_TRICORE") orelse false;
+
     const upstream = b.dependency("capstone", .{});
     const lib = b.addSharedLibrary(.{
         .name = "capstone",
         .target = target,
         .optimize = optimize,
     });
-
     lib.linkLibC();
     lib.addIncludePath(upstream.path("include"));
     lib.addCSourceFiles(.{
@@ -121,24 +139,24 @@ pub fn build(b: *std.Build) void {
         },
         .flags = &.{
             // For now, let's just add all of them lol
-            "-DCAPSTONE_HAS_ARM",
-            "-DCAPSTONE_HAS_ARM64",
-            "-DCAPSTONE_HAS_MIPS",
-            "-DCAPSTONE_HAS_POWERPC",
-            "-DCAPSTONE_HAS_X86",
-            "-DCAPSTONE_HAS_SPARC",
-            "-DCAPSTONE_HAS_SYSZ",
-            "-DCAPSTONE_HAS_XCORE",
-            "-DCAPSTONE_HAS_M68K",
-            "-DCAPSTONE_HAS_TMS320C64X",
-            "-DCAPSTONE_HAS_M680X",
-            "-DCAPSTONE_HAS_EVM",
-            "-DCAPSTONE_HAS_WASM",
-            "-DCAPSTONE_HAS_MOS65XX",
-            "-DCAPSTONE_HAS_BPF",
-            "-DCAPSTONE_HAS_RISCV",
-            "-DCAPSTONE_HAS_SH",
-            "-DCAPSTONE_HAS_TRICORE",
+            if (arm) "-DCAPSTONE_HAS_ARM" else "",
+            if (arm64) "-DCAPSTONE_HAS_ARM64" else "",
+            if (mips) "-DCAPSTONE_HAS_MIPS" else "",
+            if (powerpc) "-DCAPSTONE_HAS_POWERPC" else "",
+            if (x86) "-DCAPSTONE_HAS_X86" else "",
+            if (sparc) "-DCAPSTONE_HAS_SPARC" else "",
+            if (sysz) "-DCAPSTONE_HAS_SYSZ" else "",
+            if (xcore) "-DCAPSTONE_HAS_XCORE" else "",
+            if (m68k) "-DCAPSTONE_HAS_M68K" else "",
+            if (tms320c64x) "-DCAPSTONE_HAS_TMS320C64X" else "",
+            if (m680x) "-DCAPSTONE_HAS_M680X" else "",
+            if (evm) "-DCAPSTONE_HAS_EVM" else "",
+            if (wasm) "-DCAPSTONE_HAS_WASM" else "",
+            if (mos65xx) "-DCAPSTONE_HAS_MOS65XX" else "",
+            if (bpf) "-DCAPSTONE_HAS_BPF" else "",
+            if (riscv) "-DCAPSTONE_HAS_RISCV" else "",
+            if (sh) "-DCAPSTONE_HAS_SH" else "",
+            if (tricore) "-DCAPSTONE_HAS_TRICORE" else "",
         },
     });
 
