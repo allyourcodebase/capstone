@@ -1,166 +1,483 @@
 const std = @import("std");
-const builtin = @import("builtin");
 
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const arm = b.option(bool, "arm", "Controls -DCAPSTONE_HAS_ARM") orelse false;
-    const arm64 = b.option(bool, "arm64", "Controls -DCAPSTONE_HAS_ARM64") orelse false;
-    const mips = b.option(bool, "mips", "Controls -DCAPSTONE_HAS_MIPS") orelse false;
-    const powerpc = b.option(bool, "powerpc", "Controls -DCAPSTONE_HAS_POWERPC") orelse false;
-    const x86 = b.option(bool, "x86", "Controls -DCAPSTONE_HAS_X86") orelse false;
-    const sparc = b.option(bool, "sparc", "Controls -DCAPSTONE_HAS_SPARC") orelse false;
-    const sysz = b.option(bool, "sysz", "Controls -DCAPSTONE_HAS_SYSZ") orelse false;
-    const xcore = b.option(bool, "xcore", "Controls -DCAPSTONE_HAS_XCORE") orelse false;
-    const m68k = b.option(bool, "m68k", "Controls -DCAPSTONE_HAS_M68K") orelse false;
-    const tms320c64x = b.option(bool, "tms320c64x", "Controls -DCAPSTONE_HAS_TMS320C64X") orelse false;
-    const m680x = b.option(bool, "m680x", "Controls -DCAPSTONE_HAS_M680X") orelse false;
-    const evm = b.option(bool, "evm", "Controls -DCAPSTONE_HAS_EVM") orelse false;
-    const wasm = b.option(bool, "wasm", "Controls -DCAPSTONE_HAS_WASM") orelse false;
-    const mos65xx = b.option(bool, "mos65xx", "Controls -DCAPSTONE_HAS_MOS65XX") orelse false;
-    const bpf = b.option(bool, "bpf", "Controls -DCAPSTONE_HAS_BPF") orelse false;
-    const riscv = b.option(bool, "riscv", "Controls -DCAPSTONE_HAS_RISCV") orelse false;
-    const sh = b.option(bool, "sh", "Controls -DCAPSTONE_HAS_SH") orelse false;
-    const tricore = b.option(bool, "tricore", "Controls -DCAPSTONE_HAS_TRICORE") orelse false;
+    const shared = b.option(bool, "shared", "Build as a shared library") orelse false;
+    const strip = b.option(bool, "strip", "Omit debug information");
+    const pic = b.option(bool, "pie", "Produce Position Independent Code");
+
+    const use_default_alloc = b.option(bool, "use-default-alloc", "Use default memory allocation functions") orelse true;
+    const build_diet = b.option(bool, "build-diet", "Build diet library") orelse false;
+    const x86_reduce = b.option(bool, "x86-reduce", "x86 with reduce instruction sets to minimize library") orelse false;
+    const x86_att_disable = b.option(bool, "x86-att-disable", "Disable x86 AT&T syntax") orelse false;
+    const osx_kernel_support = b.option(bool, "osx-kernel-support", "Support to embed Capstone into OS X Kernel extensions") orelse false;
+
+    const supported_architectures_only_native = b.option(bool, "support-only-target-arch", "Only support the architecture of the build target") orelse false;
+    const supported_architectures_list = b.option([]const SupportedArchitecture, "supported-architectures", "Specify which Architectures should be supported");
+
+    var supported_architectures: std.EnumSet(SupportedArchitecture) = .{};
+    if (supported_architectures_only_native) {
+        if (SupportedArchitecture.fromArch(target.result.cpu.arch)) |arch| {
+            supported_architectures.setPresent(arch, true);
+        }
+        for (supported_architectures_list orelse &.{}) |arch| {
+            supported_architectures.setPresent(arch, true);
+        }
+    } else if (supported_architectures_list) |list| {
+        for (list) |arch| {
+            supported_architectures.setPresent(arch, true);
+        }
+    } else {
+        supported_architectures = std.EnumSet(SupportedArchitecture).initFull();
+    }
 
     const upstream = b.dependency("capstone", .{});
-    const lib = b.addSharedLibrary(.{
+
+    const capstone = std.Build.Step.Compile.create(b, .{
         .name = "capstone",
-        .target = target,
-        .optimize = optimize,
-    });
-    lib.linkLibC();
-    lib.addIncludePath(upstream.path("include"));
-    lib.addCSourceFiles(.{
-        .root = upstream.path(""),
-        .files = &.{
-            "Mapping.c",
-            "MCInst.c",
-            "cs.c",
-            "MCInstrDesc.c",
-            "utils.c",
-            "SStream.c",
-            "MCRegisterInfo.c",
-
-            "cstool/cstool_evm.c",
-            "cstool/cstool_systemz.c",
-            "cstool/getopt.c",
-            "cstool/cstool_arm64.c",
-            "cstool/cstool_tricore.c",
-            "cstool/cstool_powerpc.c",
-            "cstool/cstool_mips.c",
-            "cstool/cstool_x86.c",
-            "cstool/cstool_mos65xx.c",
-            "cstool/cstool_bpf.c",
-            "cstool/cstool.c",
-            "cstool/cstool_riscv.c",
-            "cstool/cstool_sparc.c",
-            "cstool/cstool_m68k.c",
-            "cstool/cstool_xcore.c",
-            "cstool/cstool_sh.c",
-            "cstool/cstool_tms320c64x.c",
-            "cstool/cstool_arm.c",
-            "cstool/cstool_wasm.c",
-            "cstool/cstool_m680x.c",
-
-            "arch/PowerPC/PPCModule.c",
-            "arch/PowerPC/PPCMapping.c",
-            "arch/PowerPC/PPCDisassembler.c",
-            "arch/PowerPC/PPCInstPrinter.c",
-            "arch/X86/X86IntelInstPrinter.c",
-            "arch/X86/X86DisassemblerDecoder.c",
-            "arch/X86/X86InstPrinterCommon.c",
-            "arch/X86/X86Mapping.c",
-            "arch/X86/X86Disassembler.c",
-            "arch/X86/X86Module.c",
-            "arch/X86/X86ATTInstPrinter.c",
-            "arch/M680X/M680XInstPrinter.c",
-            "arch/M680X/M680XDisassembler.c",
-            "arch/M680X/M680XModule.c",
-            "arch/TMS320C64x/TMS320C64xModule.c",
-            "arch/TMS320C64x/TMS320C64xInstPrinter.c",
-            "arch/TMS320C64x/TMS320C64xMapping.c",
-            "arch/TMS320C64x/TMS320C64xDisassembler.c",
-            "arch/XCore/XCoreDisassembler.c",
-            "arch/XCore/XCoreMapping.c",
-            "arch/XCore/XCoreInstPrinter.c",
-            "arch/XCore/XCoreModule.c",
-            "arch/MOS65XX/MOS65XXDisassembler.c",
-            "arch/MOS65XX/MOS65XXModule.c",
-            "arch/BPF/BPFDisassembler.c",
-            "arch/BPF/BPFMapping.c",
-            "arch/BPF/BPFInstPrinter.c",
-            "arch/BPF/BPFModule.c",
-            "arch/Sparc/SparcInstPrinter.c",
-            "arch/Sparc/SparcMapping.c",
-            "arch/Sparc/SparcDisassembler.c",
-            "arch/Sparc/SparcModule.c",
-            "arch/WASM/WASMModule.c",
-            "arch/WASM/WASMInstPrinter.c",
-            "arch/WASM/WASMDisassembler.c",
-            "arch/WASM/WASMMapping.c",
-            "arch/Mips/MipsInstPrinter.c",
-            "arch/Mips/MipsDisassembler.c",
-            "arch/Mips/MipsMapping.c",
-            "arch/Mips/MipsModule.c",
-            "arch/SystemZ/SystemZInstPrinter.c",
-            "arch/SystemZ/SystemZDisassembler.c",
-            "arch/SystemZ/SystemZMCTargetDesc.c",
-            "arch/SystemZ/SystemZModule.c",
-            "arch/SystemZ/SystemZMapping.c",
-            "arch/RISCV/RISCVMapping.c",
-            "arch/RISCV/RISCVDisassembler.c",
-            "arch/RISCV/RISCVInstPrinter.c",
-            "arch/RISCV/RISCVModule.c",
-            "arch/SH/SHInstPrinter.c",
-            "arch/SH/SHModule.c",
-            "arch/SH/SHDisassembler.c",
-            "arch/ARM/ARMInstPrinter.c",
-            "arch/ARM/ARMMapping.c",
-            "arch/ARM/ARMDisassembler.c",
-            "arch/ARM/ARMModule.c",
-            "arch/M68K/M68KInstPrinter.c",
-            "arch/M68K/M68KModule.c",
-            "arch/M68K/M68KDisassembler.c",
-            "arch/AArch64/AArch64BaseInfo.c",
-            "arch/AArch64/AArch64Module.c",
-            "arch/AArch64/AArch64InstPrinter.c",
-            "arch/AArch64/AArch64Mapping.c",
-            "arch/AArch64/AArch64Disassembler.c",
-            "arch/TriCore/TriCoreModule.c",
-            "arch/TriCore/TriCoreInstPrinter.c",
-            "arch/TriCore/TriCoreMapping.c",
-            "arch/TriCore/TriCoreDisassembler.c",
-            "arch/EVM/EVMModule.c",
-            "arch/EVM/EVMInstPrinter.c",
-            "arch/EVM/EVMMapping.c",
-            "arch/EVM/EVMDisassembler.c",
-        },
-        .flags = &.{
-            // For now, let's just add all of them lol
-            if (arm) "-DCAPSTONE_HAS_ARM" else "",
-            if (arm64) "-DCAPSTONE_HAS_ARM64" else "",
-            if (mips) "-DCAPSTONE_HAS_MIPS" else "",
-            if (powerpc) "-DCAPSTONE_HAS_POWERPC" else "",
-            if (x86) "-DCAPSTONE_HAS_X86" else "",
-            if (sparc) "-DCAPSTONE_HAS_SPARC" else "",
-            if (sysz) "-DCAPSTONE_HAS_SYSZ" else "",
-            if (xcore) "-DCAPSTONE_HAS_XCORE" else "",
-            if (m68k) "-DCAPSTONE_HAS_M68K" else "",
-            if (tms320c64x) "-DCAPSTONE_HAS_TMS320C64X" else "",
-            if (m680x) "-DCAPSTONE_HAS_M680X" else "",
-            if (evm) "-DCAPSTONE_HAS_EVM" else "",
-            if (wasm) "-DCAPSTONE_HAS_WASM" else "",
-            if (mos65xx) "-DCAPSTONE_HAS_MOS65XX" else "",
-            if (bpf) "-DCAPSTONE_HAS_BPF" else "",
-            if (riscv) "-DCAPSTONE_HAS_RISCV" else "",
-            if (sh) "-DCAPSTONE_HAS_SH" else "",
-            if (tricore) "-DCAPSTONE_HAS_TRICORE" else "",
+        .kind = .lib,
+        .linkage = if (shared) .dynamic else .static,
+        .root_module = .{
+            .target = target,
+            .optimize = optimize,
+            .pic = pic,
+            .strip = strip,
+            .link_libc = true,
         },
     });
+    b.installArtifact(capstone);
+    capstone.addIncludePath(upstream.path("include"));
+    capstone.installHeadersDirectory(upstream.path("include/capstone"), "capstone", .{});
+    capstone.installHeader(upstream.path("include/platform.h"), "capstone/platform.h");
+    capstone.addCSourceFiles(.{ .root = upstream.path(""), .files = common_sources });
 
-    lib.installHeadersDirectory(upstream.path("include"), "", .{});
+    if (build_diet) capstone.defineCMacro("CAPSTONE_DIET", null);
+    if (use_default_alloc) capstone.defineCMacro("CAPSTONE_USE_SYS_DYN_MEM", null);
+    if (x86_reduce) capstone.defineCMacro("CAPSTONE_X86_REDUCE", null);
+    if (x86_att_disable) capstone.defineCMacro("CAPSTONE_X86_ATT_DISABLE", null);
+    if (osx_kernel_support) capstone.defineCMacro("CAPSTONE_HAS_OSXKERNEL", null);
+    if (optimize == .Debug) capstone.defineCMacro("CAPSTONE_DEBUG", null);
 
-    b.installArtifact(lib);
+    var it = supported_architectures.iterator();
+    while (it.next()) |key| {
+        // std.log.info("Enabling CAPSTONE_HAS_{s}", .{key.macroName()});
+        capstone.defineCMacro(b.fmt("CAPSTONE_HAS_{s}", .{key.macroName()}), null);
+        capstone.addCSourceFiles(.{
+            .root = upstream.path(b.fmt("arch/{s}", .{key.subdirectory()})),
+            .files = key.sources(),
+        });
+        if (key == .x86 and !build_diet) {
+            capstone.addCSourceFile(.{ .file = upstream.path("arch/X86/X86ATTInstPrinter.c") });
+        }
+    }
+
+    {
+        const cstool = b.addExecutable(.{
+            .name = "cstool",
+            .target = target,
+            .optimize = optimize,
+            .pic = pic,
+            .strip = strip,
+            .link_libc = true,
+        });
+        cstool.linkLibrary(capstone);
+        cstool.addCSourceFiles(.{ .root = upstream.path("cstool"), .files = cstool_sources });
+        cstool.addCSourceFile(.{ .file = upstream.path("cstool/getopt.c") });
+        b.installArtifact(cstool);
+
+        const run_cmd = b.addRunArtifact(cstool);
+        run_cmd.step.dependOn(b.getInstallStep());
+        if (b.args) |args| run_cmd.addArgs(args);
+
+        const run_step = b.step("cstool", "Run cstool");
+        run_step.dependOn(&run_cmd.step);
+    }
+
+    {
+        const test_all_step = b.step("run-all-tests", "Run all test executables");
+
+        var files: std.ArrayListUnmanaged([]const u8) = .{};
+        files.appendSlice(b.allocator, test_sources) catch @panic("OOM");
+
+        it = supported_architectures.iterator();
+        while (it.next()) |key| {
+            if (key == .tricore) continue; // UB in print_zero_ext: https://github.com/capstone-engine/capstone/pull/2204
+            files.appendSlice(b.allocator, key.testSources()) catch @panic("OOM");
+        }
+
+        for (files.items) |file| {
+            const name = file["test_".len .. file.len - 2];
+            const exe = b.addExecutable(.{
+                .name = b.fmt("test-{s}", .{name}),
+                .target = target,
+                .optimize = optimize,
+                .pic = pic,
+                .strip = strip,
+                .link_libc = true,
+            });
+            exe.linkLibrary(capstone);
+            exe.addCSourceFile(.{ .file = upstream.path("tests").path(b, file) });
+
+            const run_exe = b.addRunArtifact(exe);
+            _ = run_exe.captureStdErr();
+            test_all_step.dependOn(&run_exe.step);
+
+            const step = b.step(b.fmt("run-test-{s}", .{name}), b.fmt("Run test-{s}", .{name}));
+            step.dependOn(&b.addRunArtifact(exe).step);
+        }
+    }
 }
+
+pub const SupportedArchitecture = enum {
+    arm,
+    aarch64,
+    mips,
+    powerpc,
+    sparc,
+    systemZ,
+    xcore,
+    x86,
+    /// Unsupported Zig Target
+    tms320c64x,
+    m68k,
+    /// Unsupported Zig Target
+    m680x,
+    /// Unsupported Zig Target
+    evm,
+    /// Unsupported Zig Target
+    mos65xx,
+    wasm,
+    bpf,
+    riscv,
+    /// Unsupported Zig Target
+    sh,
+    /// Unsupported Zig Target
+    tricore,
+
+    // Available in the development branch of capstone
+
+    // /// Unsupported Zig Target
+    // alpha,
+    // /// Unsupported Zig Target
+    // hppa,
+    // loongarch,
+
+    pub fn fromArch(arch: std.Target.Cpu.Arch) ?SupportedArchitecture {
+        return switch (arch) {
+            .arm, .armeb, .thumb, .thumbeb => .arm,
+            .aarch64, .aarch64_be, .aarch64_32 => .aarch64,
+            .m68k => .m68k,
+            .mips, .mipsel, .mips64, .mips64el => .mips,
+            .powerpc, .powerpcle, .powerpc64, .powerpc64le => .powerpc,
+            .sparc, .sparc64, .sparcel => .sparc,
+            .s390x => .systemZ,
+            .xcore => .xcore,
+            .x86, .x86_64 => .x86,
+            .wasm32, .wasm64 => .wasm,
+            .bpfel, .bpfeb => .bpf,
+            .riscv32, .riscv64 => .riscv,
+            .loongarch32, .loongarch64 => null, // Available in the development branch of capstone
+
+            else => null,
+        };
+    }
+
+    fn macroName(self: SupportedArchitecture) []const u8 {
+        return switch (self) {
+            .arm => "ARM",
+            .aarch64 => "ARM64", // Renamed to 'AArch64' in the development branch of capstone
+            .mips => "MIPS",
+            .powerpc => "POWERPC",
+            .sparc => "SPARC",
+            .systemZ => "SYSZ",
+            .xcore => "XCORE",
+            .x86 => "X86",
+            .tms320c64x => "TMS320C64X",
+            .m68k => "M68K",
+            .m680x => "M680X",
+            .evm => "EVM",
+            .mos65xx => "MOS65XX",
+            .wasm => "WASM",
+            .bpf => "BPF",
+            .riscv => "RISCV",
+            .sh => "SH",
+            .tricore => "TRICORE",
+            // Available in the development branch of capstone
+            // .alpha => "ALPHA",
+            // .hppa => "HPPA",
+            // .loongarch => "LOONGARCH",
+        };
+    }
+
+    fn subdirectory(self: SupportedArchitecture) []const u8 {
+        return switch (self) {
+            .arm => "ARM",
+            .aarch64 => "AArch64",
+            .mips => "Mips",
+            .powerpc => "PowerPC",
+            .sparc => "Sparc",
+            .systemZ => "SystemZ",
+            .xcore => "XCore",
+            .x86 => "X86",
+            .tms320c64x => "TMS320C64x",
+            .m68k => "M68K",
+            .m680x => "M680X",
+            .evm => "EVM",
+            .mos65xx => "MOS65XX",
+            .wasm => "WASM",
+            .bpf => "BPF",
+            .riscv => "RISCV",
+            .sh => "SH",
+            .tricore => "TriCore",
+            // Available in the development branch of capstone
+            // .alpha => "Alpha",
+            // .hppa => "HPPA",
+            // .loongarch => "LoongArch",
+        };
+    }
+
+    fn sources(self: SupportedArchitecture) []const []const u8 {
+        return switch (self) {
+            .arm => &.{
+                "ARMDisassembler.c",
+                "ARMInstPrinter.c",
+                "ARMMapping.c",
+                "ARMModule.c",
+            },
+            .aarch64 => &.{
+                "AArch64BaseInfo.c",
+                "AArch64Disassembler.c",
+                "AArch64InstPrinter.c",
+                "AArch64Mapping.c",
+                "AArch64Module.c",
+            },
+            .mips => &.{
+                "MipsDisassembler.c",
+                "MipsInstPrinter.c",
+                "MipsMapping.c",
+                "MipsModule.c",
+            },
+            .powerpc => &.{
+                "PPCDisassembler.c",
+                "PPCInstPrinter.c",
+                "PPCMapping.c",
+                "PPCModule.c",
+            },
+            .x86 => &.{
+                "X86Disassembler.c",
+                "X86DisassemblerDecoder.c",
+                "X86IntelInstPrinter.c",
+                "X86InstPrinterCommon.c",
+                "X86Mapping.c",
+                "X86Module.c",
+                // separately handled
+                // "X86ATTInstPrinter.c",
+            },
+            .sparc => &.{
+                "SparcDisassembler.c",
+                "SparcInstPrinter.c",
+                "SparcMapping.c",
+                "SparcModule.c",
+            },
+            .systemZ => &.{
+                "SystemZDisassembler.c",
+                "SystemZInstPrinter.c",
+                "SystemZMapping.c",
+                "SystemZModule.c",
+                "SystemZMCTargetDesc.c",
+            },
+            .xcore => &.{
+                "XCoreDisassembler.c",
+                "XCoreInstPrinter.c",
+                "XCoreMapping.c",
+                "XCoreModule.c",
+            },
+            .m68k => &.{
+                "M68KDisassembler.c",
+                "M68KInstPrinter.c",
+                "M68KModule.c",
+            },
+            .tms320c64x => &.{
+                "TMS320C64xDisassembler.c",
+                "TMS320C64xInstPrinter.c",
+                "TMS320C64xMapping.c",
+                "TMS320C64xModule.c",
+            },
+            .m680x => &.{
+                "M680XDisassembler.c",
+                "M680XInstPrinter.c",
+                "M680XModule.c",
+            },
+            .evm => &.{
+                "EVMDisassembler.c",
+                "EVMInstPrinter.c",
+                "EVMMapping.c",
+                "EVMModule.c",
+            },
+            .wasm => &.{
+                "WASMDisassembler.c",
+                "WASMInstPrinter.c",
+                "WASMMapping.c",
+                "WASMModule.c",
+            },
+            .mos65xx => &.{
+                "MOS65XXModule.c",
+                "MOS65XXDisassembler.c",
+            },
+            .bpf => &.{
+                "BPFDisassembler.c",
+                "BPFInstPrinter.c",
+                "BPFMapping.c",
+                "BPFModule.c",
+            },
+            .riscv => &.{
+                "RISCVDisassembler.c",
+                "RISCVInstPrinter.c",
+                "RISCVMapping.c",
+                "RISCVModule.c",
+            },
+            .sh => &.{
+                "SHDisassembler.c",
+                "SHInstPrinter.c",
+                "SHModule.c",
+            },
+            .tricore => &.{
+                "TriCoreDisassembler.c",
+                "TriCoreInstPrinter.c",
+                "TriCoreMapping.c",
+                "TriCoreModule.c",
+            },
+            // Available in the development branch of capstone
+            // .alpha => &.{
+            //     "AlphaDisassembler.c",
+            //     "AlphaInstPrinter.c",
+            //     "AlphaMapping.c",
+            //     "AlphaModule.c",
+            // },
+            // .hppa => &.{
+            //     "HPPADisassembler.c",
+            //     "HPPAInstPrinter.c",
+            //     "HPPAMapping.c",
+            //     "HPPAModule.c",
+            // },
+            // .loongarch => &.{
+            //     "LoongArchDisassembler.c",
+            //     "LoongArchDisassemblerExtension.c",
+            //     "LoongArchInstPrinter.c",
+            //     "LoongArchMapping.c",
+            //     "LoongArchModule.c",
+            // },
+        };
+    }
+
+    fn testSources(self: SupportedArchitecture) []const []const u8 {
+        return switch (self) {
+            .arm => &.{
+                "test_arm.c",
+            },
+            .aarch64 => &.{
+                "test_arm64.c",
+            },
+            .mips => &.{
+                "test_mips.c",
+            },
+            .powerpc => &.{
+                "test_ppc.c",
+            },
+            .x86 => &.{
+                "test_x86.c",
+                "test_customized_mnem.c",
+            },
+            .sparc => &.{
+                "test_sparc.c",
+            },
+            .systemZ => &.{
+                "test_systemz.c",
+            },
+            .xcore => &.{
+                "test_xcore.c",
+            },
+            .m68k => &.{
+                "test_m68k.c",
+            },
+            .tms320c64x => &.{
+                "test_tms320c64x.c",
+            },
+            .m680x => &.{
+                "test_m680x.c",
+            },
+            .evm => &.{
+                "test_evm.c",
+            },
+            .wasm => &.{
+                "test_wasm.c",
+            },
+            .mos65xx => &.{
+                "test_mos65xx.c",
+            },
+            .bpf => &.{
+                "test_bpf.c",
+            },
+            .riscv => &.{
+                "test_riscv.c",
+            },
+            .sh => &.{
+                "test_sh.c",
+            },
+            .tricore => &.{
+                "test_tricore.c",
+            },
+            // Available in the development branch of capstone
+            // .alpha => &.{
+            //     "test_alpha.c",
+            // },
+            // .hppa => &.{
+            //     "test_hppa.c",
+            // },
+            // .loongarch => &.{
+            //     "test_loongarch.c",
+            // },
+        };
+    }
+};
+
+const common_sources: []const []const u8 = &.{
+    "cs.c",
+    "Mapping.c",
+    "MCInst.c",
+    "MCInstrDesc.c",
+    "MCRegisterInfo.c",
+    "SStream.c",
+    "utils.c",
+};
+
+const cstool_sources: []const []const u8 = &.{
+    "cstool.c",
+    "cstool_arm.c",
+    "cstool_arm64.c",
+    "cstool_bpf.c",
+    "cstool_evm.c",
+    "cstool_m680x.c",
+    "cstool_m68k.c",
+    "cstool_mips.c",
+    "cstool_mos65xx.c",
+    "cstool_powerpc.c",
+    "cstool_riscv.c",
+    "cstool_sh.c",
+    "cstool_sparc.c",
+    "cstool_systemz.c",
+    "cstool_tms320c64x.c",
+    "cstool_tricore.c",
+    "cstool_wasm.c",
+    "cstool_x86.c",
+    "cstool_xcore.c",
+};
+
+const test_sources: []const []const u8 = &.{
+    "test_basic.c",
+    "test_detail.c",
+    "test_skipdata.c",
+    "test_iter.c",
+};
