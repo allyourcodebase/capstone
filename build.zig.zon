@@ -1,6 +1,7 @@
 .{
     .name = "capstone",
     .version = "5.0.1",
+    .minimum_zig_version = "0.13.0",
 
     .dependencies = .{
         .capstone = .{
