@@ -167,11 +167,11 @@ pub const SupportedArchitecture = enum {
     pub fn fromArch(arch: std.Target.Cpu.Arch) ?SupportedArchitecture {
         return switch (arch) {
             .arm, .armeb, .thumb, .thumbeb => .arm,
-            .aarch64, .aarch64_be, .aarch64_32 => .aarch64,
+            .aarch64, .aarch64_be => .aarch64,
             .m68k => .m68k,
             .mips, .mipsel, .mips64, .mips64el => .mips,
             .powerpc, .powerpcle, .powerpc64, .powerpc64le => .powerpc,
-            .sparc, .sparc64, .sparcel => .sparc,
+            .sparc, .sparc64 => .sparc,
             .s390x => .systemZ,
             .xcore => .xcore,
             .x86, .x86_64 => .x86,
