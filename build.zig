@@ -4,7 +4,7 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const shared = b.option(bool, "shared", "Build as a shared library") orelse false;
+    const linkage = b.option(std.builtin.LinkMode, "linkage", "How the library shall be linked") orelse .static;
     const strip = b.option(bool, "strip", "Omit debug information");
     const pic = b.option(bool, "pie", "Produce Position Independent Code");
 
@@ -35,17 +35,16 @@ pub fn build(b: *std.Build) void {
 
     const upstream = b.dependency("capstone", .{});
 
-    const capstone = std.Build.Step.Compile.create(b, .{
+    const capstone = b.addLibrary(.{
         .name = "capstone",
-        .kind = .lib,
-        .linkage = if (shared) .dynamic else .static,
-        .root_module = .{
+        .linkage = linkage,
+        .root_module = b.createModule(.{
             .target = target,
             .optimize = optimize,
             .pic = pic,
             .strip = strip,
             .link_libc = true,
-        },
+        }),
     });
     b.installArtifact(capstone);
     capstone.addIncludePath(upstream.path("include"));
@@ -53,17 +52,17 @@ pub fn build(b: *std.Build) void {
     capstone.installHeader(upstream.path("include/platform.h"), "capstone/platform.h");
     capstone.addCSourceFiles(.{ .root = upstream.path(""), .files = common_sources });
 
-    if (build_diet) capstone.defineCMacro("CAPSTONE_DIET", null);
-    if (use_default_alloc) capstone.defineCMacro("CAPSTONE_USE_SYS_DYN_MEM", null);
-    if (x86_reduce) capstone.defineCMacro("CAPSTONE_X86_REDUCE", null);
-    if (x86_att_disable) capstone.defineCMacro("CAPSTONE_X86_ATT_DISABLE", null);
-    if (osx_kernel_support) capstone.defineCMacro("CAPSTONE_HAS_OSXKERNEL", null);
-    if (optimize == .Debug) capstone.defineCMacro("CAPSTONE_DEBUG", null);
+    if (build_diet) capstone.root_module.addCMacro("CAPSTONE_DIET", "");
+    if (use_default_alloc) capstone.root_module.addCMacro("CAPSTONE_USE_SYS_DYN_MEM", "");
+    if (x86_reduce) capstone.root_module.addCMacro("CAPSTONE_X86_REDUCE", "");
+    if (x86_att_disable) capstone.root_module.addCMacro("CAPSTONE_X86_ATT_DISABLE", "");
+    if (osx_kernel_support) capstone.root_module.addCMacro("CAPSTONE_HAS_OSXKERNEL", "");
+    if (optimize == .Debug) capstone.root_module.addCMacro("CAPSTONE_DEBUG", "");
 
     var it = supported_architectures.iterator();
     while (it.next()) |key| {
         // std.log.info("Enabling CAPSTONE_HAS_{s}", .{key.macroName()});
-        capstone.defineCMacro(b.fmt("CAPSTONE_HAS_{s}", .{key.macroName()}), null);
+        capstone.root_module.addCMacro(b.fmt("CAPSTONE_HAS_{s}", .{key.macroName()}), "");
         capstone.addCSourceFiles(.{
             .root = upstream.path(b.fmt("arch/{s}", .{key.subdirectory()})),
             .files = key.sources(),
