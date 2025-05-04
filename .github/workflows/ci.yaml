@@ -36,3 +36,6 @@ jobs:
 
       - name: Build
         run: zig build --summary all
+
+      - name: Test
+        run: zig build run-all-tests --summary all

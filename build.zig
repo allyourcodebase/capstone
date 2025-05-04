@@ -48,8 +48,9 @@ pub fn build(b: *std.Build) void {
     });
     b.installArtifact(capstone);
     capstone.addIncludePath(upstream.path("include"));
-    capstone.installHeadersDirectory(upstream.path("include/capstone"), "capstone", .{});
-    capstone.installHeader(upstream.path("include/platform.h"), "capstone/platform.h");
+    // The header files should be installed in a 'capstone' subdirectory in capstone v6.
+    capstone.installHeadersDirectory(upstream.path("include/capstone"), "", .{});
+    capstone.installHeader(upstream.path("include/platform.h"), "platform.h");
     capstone.addCSourceFiles(.{ .root = upstream.path(""), .files = common_sources });
 
     if (build_diet) capstone.root_module.addCMacro("CAPSTONE_DIET", "");
@@ -81,6 +82,7 @@ pub fn build(b: *std.Build) void {
             .strip = strip,
             .link_libc = true,
         });
+        cstool.addIncludePath(upstream.path("include")); // remove this in capstone v6
         cstool.linkLibrary(capstone);
         cstool.addCSourceFiles(.{ .root = upstream.path("cstool"), .files = cstool_sources });
         cstool.addCSourceFile(.{ .file = upstream.path("cstool/getopt.c") });
@@ -116,6 +118,7 @@ pub fn build(b: *std.Build) void {
                 .strip = strip,
                 .link_libc = true,
             });
+            exe.addIncludePath(upstream.path("include")); // remove this in capstone v6
             exe.linkLibrary(capstone);
             exe.addCSourceFile(.{ .file = upstream.path("tests").path(b, file) });
 
