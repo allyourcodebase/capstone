@@ -1,4 +1,5 @@
 const std = @import("std");
+const minimum_zig_version = std.SemanticVersion.parse(@import("build.zig.zon").minimum_zig_version) catch unreachable;
 
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
@@ -58,7 +59,8 @@ pub fn build(b: *std.Build) void {
     if (x86_reduce) capstone.root_module.addCMacro("CAPSTONE_X86_REDUCE", "");
     if (x86_att_disable) capstone.root_module.addCMacro("CAPSTONE_X86_ATT_DISABLE", "");
     if (osx_kernel_support) capstone.root_module.addCMacro("CAPSTONE_HAS_OSXKERNEL", "");
-    if (optimize == .Debug) capstone.root_module.addCMacro("CAPSTONE_DEBUG", "");
+    comptime std.debug.assert(minimum_zig_version.order(.{ .major = 0, .minor = 17, .patch = 0 }) == .lt); // use `.debug` below after updating to Zig 0.17.0+
+    if (optimize == std.builtin.OptimizeMode.Debug) capstone.root_module.addCMacro("CAPSTONE_DEBUG", "");
 
     if (use_arch_registration) {
         capstone.root_module.addCMacro("CAPSTONE_USE_ARCH_REGISTRATION", "");
@@ -101,7 +103,12 @@ pub fn build(b: *std.Build) void {
 
         const run_cmd = b.addRunArtifact(cstool);
         run_cmd.step.dependOn(b.getInstallStep());
-        if (b.args) |args| run_cmd.addArgs(args);
+        comptime std.debug.assert(minimum_zig_version.order(.{ .major = 0, .minor = 17, .patch = 0 }) == .lt); // remove check below after updating to Zig 0.17.0+
+        if (@hasDecl(std.Build.Step.Run, "addPassthruArgs")) {
+            run_cmd.addPassthruArgs();
+        } else {
+            if (b.args) |args| run_cmd.addArgs(args);
+        }
 
         const run_step = b.step("cstool", "Run cstool");
         run_step.dependOn(&run_cmd.step);
